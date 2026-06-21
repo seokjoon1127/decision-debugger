@@ -41,6 +41,10 @@ def create_session(req: CreateSessionRequest) -> JSONResponse:
         raise HTTPException(status_code=400, detail="고민 내용을 조금 더 자세히 적어주세요.")
     try:
         session = orchestrator.create_session(context)
+    except ValueError as exc:
+        if str(exc) == "unidentifiable_input":
+            raise HTTPException(status_code=400, detail="다시 한번 자세하게 입력해주세요.") from exc
+        raise HTTPException(status_code=400, detail="입력을 분석할 수 없습니다. 고민 내용을 구체적으로 작성해주세요.") from exc
     except Exception as exc:  # noqa: BLE001
         logger.exception("analyze failed")
         # Never echo internal exception text to the client (keep full detail in logs only).

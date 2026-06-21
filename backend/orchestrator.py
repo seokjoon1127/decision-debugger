@@ -47,6 +47,8 @@ def analyze(session: DecisionSession) -> None:
 
     # 1) options + summary
     extracted = llm.extract_options(session.context)
+    if extracted.get("unidentifiable"):
+        raise ValueError("unidentifiable_input")
     session.context_summary = extracted["context_summary"] or session.context
     options: list[Option] = []
     for o in extracted["options"]:

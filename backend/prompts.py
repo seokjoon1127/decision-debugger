@@ -37,13 +37,18 @@ def extract_options(context: str) -> tuple[str, str]:
         "You are a decision analyst. The user describes a dilemma in free text. "
         "Your job is to normalize it into 2-4 mutually-exclusive, well-defined options "
         "and a concise neutral summary of their situation. Do NOT ask the user anything — "
-        "resolve ambiguity yourself with the most reasonable interpretation.\n"
+        "resolve ambiguity yourself with the most reasonable interpretation.\n\n"
+        "IMPORTANT: Before analyzing, check if the input is a real, coherent decision dilemma. "
+        "If the input is meaningless noise — such as random repeated characters, gibberish, "
+        "keyboard spam, or any text that does not express a recognizable human concern or question — "
+        "you MUST return ONLY: {\"unidentifiable\": true} and nothing else.\n\n"
         f"{_LANG_RULE}\n{_JSON_RULE}"
     )
     user = (
         "User's dilemma:\n"
         f'"""\n{context}\n"""\n\n'
-        "Return JSON of the exact shape:\n"
+        "If the input is unidentifiable noise, return: {\"unidentifiable\": true}\n\n"
+        "Otherwise return JSON of the exact shape:\n"
         "{\n"
         '  "context_summary": "<2-4 sentence neutral summary of the decision and constraints>",\n'
         '  "options": [ {"name": "<short distinct label>", "description": "<one sentence>"}, ... ]\n'
