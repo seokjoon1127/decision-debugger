@@ -64,10 +64,7 @@ def _chat_json(system: str, user: str, max_attempts: int = 2) -> dict[str, Any]:
 def extract_options(context: str) -> dict[str, Any]:
     system, user = prompts.extract_options(context)
     data = _chat_json(system, user)
-    if data.get("unidentifiable"):
-        return {"unidentifiable": True}
     return {
-        "unidentifiable": False,
         "context_summary": str(data.get("context_summary", "")).strip(),
         "options": data.get("options", []) or [],
     }
