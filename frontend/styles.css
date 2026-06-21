@@ -570,6 +570,26 @@ body {
   padding: var(--s-section) var(--s-lg) var(--s-xxl);
   animation: fade-in 0.4s ease;
 }
+.result__query-box {
+  background: var(--parchment);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: var(--s-md) var(--s-lg);
+  margin-bottom: var(--s-lg);
+}
+.result__query-label {
+  color: var(--ink-muted-80);
+  font-size: 13px;
+  display: block;
+  margin-bottom: var(--s-xs);
+}
+.result__query-text {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0;
+  white-space: pre-wrap;
+}
 .result__head {
   margin-bottom: var(--s-xxl);
 }

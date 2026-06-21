@@ -709,6 +709,8 @@ def result_view(session: DecisionSession) -> dict:
     )
     return {
         "status": session.status.value,
+        "context": session.context,
+        "context_summary": session.context_summary,
         "ranking": ranking,
         "winner": ranking[0] if ranking else None,
         "robustness": res.robustness,

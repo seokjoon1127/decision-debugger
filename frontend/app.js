@@ -34,6 +34,8 @@
     toast: document.getElementById("toast"),
     toastMsg: document.getElementById("toast-msg"),
     // result
+    resultQueryBox: document.getElementById("result-query-box"),
+    resultQuery: document.getElementById("result-query"),
     resultWinner: document.getElementById("result-winner"),
     robustnessBadge: document.getElementById("robustness-badge"),
     marginBadge: document.getElementById("margin-badge"),
@@ -457,6 +459,13 @@
         el.progressLabel.textContent = (err.detail || err.message || "리포트를 불러오지 못했습니다.");
         showScreen("question");
       });
+    // query
+    if (data.context) {
+      el.resultQueryBox.hidden = false;
+      el.resultQuery.textContent = data.context;
+    } else {
+      el.resultQueryBox.hidden = true;
+    }
   }
 
   function renderResult(data) {
