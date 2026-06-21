@@ -1,0 +1,27 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mind Compass">
+  <!-- cardinal tick marks (N, E, W) -->
+  <g stroke="#3E5C6E" stroke-width="6" stroke-linecap="round">
+    <line x1="100" y1="13" x2="100" y2="25"/>
+    <line x1="187" y1="100" x2="175" y2="100"/>
+    <line x1="13" y1="100" x2="25" y2="100"/>
+  </g>
+  <!-- compass ring doubling as a speech bubble (tail at lower-left) -->
+  <path d="M100 30 A70 70 0 1 1 76 166 L45 181 L46 145 A70 70 0 0 1 100 30 Z"
+        fill="#ffffff" stroke="#3E5C6E" stroke-width="9"
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- needle: blue (NE) + green (SW), split across the NW–SE waist -->
+  <polygon points="140,60 115,115 85,85" fill="#87AEDC"/>
+  <polygon points="60,140 115,115 85,85" fill="#8FBF9F"/>
+  <!-- hub -->
+  <circle cx="100" cy="100" r="13" fill="#ffffff" stroke="#3E5C6E" stroke-width="6"/>
+  <!-- smiley -->
+  <circle cx="89" cy="141" r="3.6" fill="#3E5C6E"/>
+  <circle cx="111" cy="141" r="3.6" fill="#3E5C6E"/>
+  <path d="M87 151 q13 11 26 0" fill="none" stroke="#3E5C6E" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- sparkle accents -->
+  <g stroke-width="5" stroke-linecap="round">
+    <line x1="152" y1="20" x2="152" y2="33" stroke="#F2C879"/>
+    <line x1="168" y1="30" x2="178" y2="20" stroke="#8FBF9F"/>
+    <line x1="172" y1="48" x2="185" y2="48" stroke="#87AEDC"/>
+  </g>
+</svg>
