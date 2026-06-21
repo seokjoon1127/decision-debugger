@@ -5,6 +5,7 @@ Wires the LLM layer (speaks in human-readable names) to the typed models
 """
 from __future__ import annotations
 
+import concurrent.futures
 import time
 from typing import Any, Optional
 
@@ -94,10 +95,25 @@ def analyze(session: DecisionSession) -> None:
     # (3 — removed) Indicator / yes-no questions are no longer used: every question is a
     # two-card comparison. Hard-to-decide pairs are handled by recursive decomposition (§6.3).
 
-    # 4) pairwise verbalizations (batched)
-    raw_pairs = llm.verbalize_pairs(
-        [{"name": f.name} for f in factors], session.context_summary,
-    )
+    # 4 & 5) pairwise verbalizations and option scores are independent — both
+    # depend only on factors/options/summary, not on each other — so run them
+    # concurrently to cut one LLM round-trip off the analysis wait.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        pairs_future = pool.submit(
+            llm.verbalize_pairs,
+            [{"name": f.name} for f in factors], session.context_summary,
+        )
+        scores_future = pool.submit(
+            llm.score_options,
+            [{"name": o.name, "description": o.description} for o in options],
+            [{"name": f.name, "description": f.description, "type": f.type, "direction": f.direction}
+             for f in factors],
+            session.context_summary,
+        )
+        raw_pairs = pairs_future.result()
+        raw_scores = scores_future.result()
+
+    # 4) pairwise verbalizations
     for p in raw_pairs:
         fa = name_to_factor.get(str(p.get("factor_a", "")).strip().casefold())
         fb = name_to_factor.get(str(p.get("factor_b", "")).strip().casefold())
@@ -110,13 +126,7 @@ def analyze(session: DecisionSession) -> None:
             "first": fa.id,  # which factor the verbalization treated as "a"
         }
 
-    # 5) option scores
-    raw_scores = llm.score_options(
-        [{"name": o.name, "description": o.description} for o in options],
-        [{"name": f.name, "description": f.description, "type": f.type, "direction": f.direction}
-         for f in factors],
-        session.context_summary,
-    )
+    # 5) option scores (fetched in parallel with the verbalizations above)
     opt_by_name = {o.name.casefold(): o for o in options}
     matrix: dict[str, dict[str, Score]] = {o.id: {} for o in options}
     for oname, fac_scores in (raw_scores or {}).items():
