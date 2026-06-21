@@ -18,7 +18,7 @@ from .models import AnswerRequest, CreateSessionRequest
 
 logger = logging.getLogger("decision_debugger")
 
-app = FastAPI(title="Decision Debugger", version="1.0.0")
+app = FastAPI(title="Mind Compass", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

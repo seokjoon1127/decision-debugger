@@ -157,8 +157,24 @@ body {
 .setup__hero {
   margin-bottom: var(--s-xxl);
 }
+.hero-logo {
+  display: block;
+  width: 132px;
+  height: 132px;
+  margin: 0 auto var(--s-sm);
+}
+.wordmark {
+  text-align: center;
+  font-weight: 700;
+  font-size: 46px;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  margin: 0;
+}
+.wm-mind { color: #3e5c6e; }
+.wm-compass { color: #8fbf9f; }
 .setup__sub {
-  margin-top: var(--s-lg);
+  margin-top: var(--s-md);
   color: var(--ink-muted-80);
   font-size: 22.4px; /* 80% of the .lead 28px */
 }
@@ -781,6 +797,13 @@ body {
   }
   .setup__sub {
     font-size: 16.8px; /* 80% of 21px on phones */
+  }
+  .wordmark {
+    font-size: 34px;
+  }
+  .hero-logo {
+    width: 104px;
+    height: 104px;
   }
   /* tiles stack to one column on phones, per DESIGN.md */
   .pair {
