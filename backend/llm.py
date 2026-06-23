@@ -79,14 +79,6 @@ def decide_factors(options: list[dict], context_summary: str) -> list[dict]:
     return data.get("factors", []) or []
 
 
-def decompose_indicators(abstract_factors: list[dict], context_summary: str) -> list[dict]:
-    if not abstract_factors:
-        return []
-    system, user = prompts.decompose_indicators(abstract_factors, context_summary)
-    data = _chat_json(system, user)
-    return data.get("indicators", []) or []
-
-
 def verbalize_pairs(factors: list[dict], context_summary: str) -> list[dict]:
     if len(factors) < 2:
         return []

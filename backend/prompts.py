@@ -108,44 +108,7 @@ def decide_factors(options: list[dict], context_summary: str) -> tuple[str, str]
 
 
 # --------------------------------------------------------------------------- #
-# 3. decompose_indicators
-# --------------------------------------------------------------------------- #
-def decompose_indicators(abstract_factors: list[dict], context_summary: str) -> tuple[str, str]:
-    system = (
-        "You operationalize ABSTRACT decision factors into easy, concrete indicator questions "
-        "that indirectly reveal how much the user cares about each factor. A good indicator is "
-        "answerable in seconds and behavioral/observable, not a direct 'how much do you value X?' "
-        "question.\n\n"
-        "Each indicator needs a STRUCTURED mapping converting the answer into a 'signal' in [0,1], "
-        "where 1 = the answer reveals the user cares a LOT about this factor, 0 = cares little.\n"
-        "Mapping format by answer_type:\n"
-        '- binary:  {"yes": <signal 0..1>, "no": <signal 0..1>}\n'
-        '- scale:   {"min": 1, "max": 5, "min_signal": <0..1>, "max_signal": <0..1>}  (linear)\n'
-        '- count:   {"low": <n>, "high": <n>, "low_signal": <0..1>, "high_signal": <0..1>}  (linear, clamped)\n'
-        '- choice:  {"choices": [{"label": "<text>", "signal": <0..1>}, ...]}\n'
-        f"{_LANG_RULE}\n{_EASY}\n{_JSON_RULE}"
-    )
-    user = (
-        f"Decision summary:\n{context_summary}\n\n"
-        f"Abstract factors:\n{json.dumps(abstract_factors, ensure_ascii=False, indent=2)}\n\n"
-        "For EACH abstract factor produce 1-2 indicators. Return JSON:\n"
-        "{\n"
-        '  "indicators": [\n'
-        "    {\n"
-        '      "factor_name": "<exact name of the abstract factor>",\n'
-        '      "question": "<easy concrete question>",\n'
-        '      "answer_type": "binary" | "scale" | "count" | "choice",\n'
-        '      "mapping": { ... per the format above ... }\n'
-        "    }, ...\n"
-        "  ]\n"
-        "}\n"
-        "For choice questions, give 2-4 choices. For scale, prefer a 1-5 scale."
-    )
-    return system, user
-
-
-# --------------------------------------------------------------------------- #
-# 4. verbalize_pairs  (batched — all factor pairs at once)
+# verbalize_pairs  (batched — all factor pairs at once)
 # --------------------------------------------------------------------------- #
 def verbalize_pairs(factors: list[dict], context_summary: str) -> tuple[str, str]:
     system = (

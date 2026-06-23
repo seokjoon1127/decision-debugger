@@ -14,7 +14,6 @@ from .models import (
     Answer,
     DecisionSession,
     Factor,
-    Indicator,
     Option,
     Question,
     Result,
@@ -26,7 +25,6 @@ from .models import (
 
 # --- tuning constants ---
 NUM_QUESTIONS = 5     # fixed number of MAIN questions asked — no early stopping
-INDICATOR_WEIGHT = 0.4
 LAMBDA = 0.5          # L2 pull of refined weights toward the LLM prior
 MAX_DECOMP_DEPTH = 4  # §6.3: how deep recursive sub-questions may go before giving up
 
@@ -92,8 +90,8 @@ def analyze(session: DecisionSession) -> None:
 
     name_to_factor = {f.name.casefold(): f for f in factors}
 
-    # (3 — removed) Indicator / yes-no questions are no longer used: every question is a
-    # two-card comparison. Hard-to-decide pairs are handled by recursive decomposition (§6.3).
+    # Every question is a two-card comparison; hard-to-decide pairs are handled
+    # by recursive decomposition (§6.3).
 
     # 4 & 5) pairwise verbalizations and option scores are independent — both
     # depend only on factors/options/summary, not on each other — so run them
@@ -141,18 +139,17 @@ def analyze(session: DecisionSession) -> None:
     # fill any missing cells defensively
     for o in options:
         for f in factors:
-            matrix[o.id].setdefault(f.id, Score(value=0.5, confidence=0.3, rationale=""))
+            matrix[o.id].setdefault(f.id, Score(value=0.5, rationale=""))
     session.score_matrix = matrix
 
     # normalize (per-factor min-max; direction is informational only — scores are desirability)
     raw_values = {oid: {fid: matrix[oid][fid].value for fid in matrix[oid]} for oid in matrix}
-    directions = {f.id: f.direction for f in factors}
-    session.norm_scores = compute.normalize_scores(raw_values, directions)
+    session.norm_scores = compute.normalize_scores(raw_values)
 
     # weights: prior from importance, current = prior initially
     total_imp = sum(f.importance for f in factors) or 1.0
     prior = {f.id: f.importance / total_imp for f in factors}
-    session.weights = WeightState(prior=prior, current=dict(prior), conflict=[])
+    session.weights = WeightState(prior=prior, current=dict(prior))
 
     # build question queue: every factor pair (all questions are two-card comparisons)
     questions: list[Question] = []
@@ -164,8 +161,6 @@ def analyze(session: DecisionSession) -> None:
             ))
     session.questions = questions
 
-    # seed rank history
-    session.rank_history = [compute.aggregate(session.weights.current, session.norm_scores)]
     session.status = State.QUESTIONING
     store.save(session)
 
@@ -195,17 +190,13 @@ def next_question(session: DecisionSession) -> Optional[Question]:
         finalize(session)
         return None
 
-    comparisons = _build_comparisons(session)
     candidate_pairs = [
         (q.payload["factor_a_id"], q.payload["factor_b_id"]) for q in pending
     ]
 
     selection = compute.select_next_question(
-        prior=session.weights.prior,
         current=session.weights.current,
-        comparisons=comparisons,
         candidate_pairs=candidate_pairs,
-        candidate_indicators=[],
         norm_scores=session.norm_scores,
         ensemble_size=30,
         seed=answered,  # deterministic per turn
@@ -248,16 +239,10 @@ def submit_answer(session: DecisionSession, question_id: str, value: Any) -> Que
 
 
 def _recompute(session: DecisionSession) -> None:
-    """Refine weights from all answers, detect conflict, append a utility snapshot."""
+    """Refine weights from all answers."""
     comparisons = _build_comparisons(session)
     session.weights.current = compute.refine_weights(
         prior=session.weights.prior, comparisons=comparisons, lam=LAMBDA,
-    )
-    session.weights.conflict = compute.detect_conflict(
-        session.weights.prior, session.weights.current,
-    )
-    session.rank_history.append(
-        compute.aggregate(session.weights.current, session.norm_scores)
     )
 
 
@@ -297,7 +282,7 @@ def _next_subquestion(session: DecisionSession) -> Question:
             {"label": fb.name, "example": "", "favors": "b", "strength": 0.7},
         ]
     subq = Question(
-        id=new_id("q"), kind="sub_question", parent_id=dec["root_id"],
+        id=new_id("q"), kind="sub_question",
         payload={
             "root_id": dec["root_id"],
             "factor_a_id": fa.id, "factor_b_id": fb.id,
@@ -456,26 +441,12 @@ def _coerce_score(sc: Any) -> Score:
         try:
             return Score(value=_clamp01(float(sc)))
         except (TypeError, ValueError):
-            return Score(value=0.5, confidence=0.3)
+            return Score(value=0.5)
     try:
         value = _clamp01(float(sc.get("value", 0.5)))
     except (TypeError, ValueError):
         value = 0.5
-    rng = sc.get("range")
-    if isinstance(rng, list) and len(rng) == 2:
-        try:
-            rng = [_clamp01(float(rng[0])), _clamp01(float(rng[1]))]
-        except (TypeError, ValueError):
-            rng = None
-    else:
-        rng = None
-    conf = sc.get("confidence")
-    try:
-        conf = _clamp01(float(conf)) if conf is not None else None
-    except (TypeError, ValueError):
-        conf = None
-    return Score(value=value, range=rng, confidence=conf,
-                 rationale=str(sc.get("rationale", "")).strip())
+    return Score(value=value, rationale=str(sc.get("rationale", "")).strip())
 
 
 def _clamp01(x: float) -> float:
@@ -485,7 +456,6 @@ def _clamp01(x: float) -> float:
 def _build_comparisons(session: DecisionSession) -> list[dict]:
     """Convert all answers into BT comparisons over factor importance."""
     comparisons: list[dict] = []
-    indicator_signals: dict[str, list[float]] = {}
 
     answered = {a.question_id: a.value for a in session.answers}
     for q in session.questions:
@@ -511,79 +481,14 @@ def _build_comparisons(session: DecisionSession) -> list[dict]:
             elif v == "similar":
                 comparisons.append({"i": fa, "j": fb, "target": 0.5, "weight": 0.5})
             # "unknown" -> contribute nothing (root is being decomposed)
-        elif q.kind == "indicator":
-            ind = _find_indicator(session, q.payload["indicator_id"])
-            if ind is None:
-                continue
-            sig = _signal_from_answer(ind, value)
-            if sig is not None:
-                indicator_signals.setdefault(q.payload["factor_id"], []).append(sig)
-
-    # fold indicator signals into soft comparisons vs every other factor
-    factor_ids = [f.id for f in session.factors]
-    for fid, sigs in indicator_signals.items():
-        s = sum(sigs) / len(sigs)
-        for other in factor_ids:
-            if other == fid:
-                continue
-            comparisons.append({"i": fid, "j": other, "target": s, "weight": INDICATOR_WEIGHT})
     return comparisons
 
 
-def _find_indicator(session: DecisionSession, indicator_id: str) -> Optional[Indicator]:
-    for f in session.factors:
-        for ind in f.indicators:
-            if ind.id == indicator_id:
-                return ind
-    return None
-
-
-def _signal_from_answer(ind: Indicator, value: Any) -> Optional[float]:
-    m = ind.mapping or {}
-    try:
-        if ind.answer_type == "binary":
-            v = str(value).strip().lower()
-            yes = v in ("yes", "y", "true", "1", "네", "예", "응")
-            no = v in ("no", "n", "false", "0", "아니", "아니오", "아뇨")
-            if yes:
-                return _clamp01(float(m.get("yes", 0.7)))
-            if no:
-                return _clamp01(float(m.get("no", 0.3)))
-            return None
-        if ind.answer_type == "scale":
-            v = float(value)
-            lo, hi = float(m.get("min", 1)), float(m.get("max", 5))
-            ls, hs = float(m.get("min_signal", 0.2)), float(m.get("max_signal", 0.9))
-            return _clamp01(_lerp(v, lo, hi, ls, hs))
-        if ind.answer_type == "count":
-            v = float(value)
-            lo, hi = float(m.get("low", 0)), float(m.get("high", 10))
-            ls, hs = float(m.get("low_signal", 0.2)), float(m.get("high_signal", 0.9))
-            return _clamp01(_lerp(v, lo, hi, ls, hs))
-        if ind.answer_type == "choice":
-            v = str(value).strip()
-            for ch in m.get("choices", []):
-                if str(ch.get("label", "")).strip() == v:
-                    return _clamp01(float(ch.get("signal", 0.5)))
-            return None
-    except (TypeError, ValueError):
-        return None
-    return None
-
-
-def _lerp(v: float, lo: float, hi: float, slo: float, shi: float) -> float:
-    if hi == lo:
-        return (slo + shi) / 2.0
-    t = (v - lo) / (hi - lo)
-    t = max(0.0, min(1.0, t))
-    return slo + t * (shi - slo)
-
-
 def _main_answered(session: DecisionSession) -> int:
-    """Answered MAIN questions (pairwise/indicator). Sub-questions don't count toward
+    """Answered MAIN questions (pairwise). Sub-questions don't count toward
     the question budget — they're part of resolving one main question."""
     return sum(1 for q in session.questions
-               if q.kind in ("weight_pairwise", "indicator") and q.status == "answered")
+               if q.kind == "weight_pairwise" and q.status == "answered")
 
 
 def _match_question(pending: list[Question], selection: dict) -> Optional[Question]:
@@ -593,11 +498,6 @@ def _match_question(pending: list[Question], selection: dict) -> Optional[Questi
         pair = set(selection.get("pair", []))
         for q in pending:
             if q.kind == "weight_pairwise" and {q.payload["factor_a_id"], q.payload["factor_b_id"]} == pair:
-                return q
-    elif selection.get("kind") == "indicator":
-        ind_id = selection.get("indicator_id")
-        for q in pending:
-            if q.kind == "indicator" and q.payload["indicator_id"] == ind_id:
                 return q
     return None
 
@@ -671,25 +571,6 @@ def question_view(session: DecisionSession, q: Question) -> dict:
             "example_b": ex_b,
             "progress": progress,
         }
-    # indicator
-    ind = _find_indicator(session, q.payload["indicator_id"])
-    fac = session.factor(q.payload["factor_id"])
-    view: dict[str, Any] = {
-        "id": q.id,
-        "kind": "indicator",
-        "question": ind.question if ind else "",
-        "answer_type": ind.answer_type if ind else "binary",
-        "factor": {"id": fac.id, "name": fac.name} if fac else None,
-        "progress": progress,
-    }
-    if ind and ind.answer_type == "choice":
-        view["choices"] = [
-            {"value": str(c.get("label", "")), "label": str(c.get("label", ""))}
-            for c in (ind.mapping.get("choices", []) or [])
-        ]
-    elif ind and ind.answer_type == "scale":
-        view["scale"] = {"min": int(ind.mapping.get("min", 1)), "max": int(ind.mapping.get("max", 5))}
-    return view
 
 
 def result_view(session: DecisionSession) -> dict:

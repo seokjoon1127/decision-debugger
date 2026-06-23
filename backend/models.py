@@ -28,15 +28,6 @@ class Option(BaseModel):
     description: str = ""
 
 
-class Indicator(BaseModel):
-    id: str
-    factor_id: str
-    question: str
-    answer_type: Literal["binary", "scale", "count", "choice"]
-    # Structured mapping: answer -> signal in [0,1] ("how much the user cares about this factor").
-    mapping: dict[str, Any] = Field(default_factory=dict)
-
-
 class Factor(BaseModel):
     id: str
     name: str
@@ -45,30 +36,23 @@ class Factor(BaseModel):
     direction: Literal["higher_better", "lower_better"] = "higher_better"
     importance: float = 1.0  # LLM-decided initial importance -> WeightState.prior
     relevance: str = ""
-    indicators: list[Indicator] = Field(default_factory=list)
 
 
 class Score(BaseModel):
     value: float  # normalized-ish [0,1] as decided by the LLM (re-normalized in compute)
-    source: str = "llm"
     rationale: str = ""
-    range: Optional[list[float]] = None  # [lo, hi] uncertainty band
-    confidence: Optional[float] = None  # [0,1]
 
 
 class WeightState(BaseModel):
     prior: dict[str, float] = Field(default_factory=dict)    # factor_id -> w (LLM)
     current: dict[str, float] = Field(default_factory=dict)  # factor_id -> w (refined)
-    conflict: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class Question(BaseModel):
     id: str
-    kind: Literal["weight_pairwise", "indicator", "sub_question"]
+    kind: Literal["weight_pairwise", "sub_question"]
     payload: dict[str, Any] = Field(default_factory=dict)
-    parent_id: Optional[str] = None
-    status: Literal["pending", "answered", "skipped"] = "pending"
-    info_value: float = 0.0
+    status: Literal["pending", "answered"] = "pending"
 
 
 class Answer(BaseModel):
@@ -104,12 +88,9 @@ class DecisionSession(BaseModel):
     questions: list[Question] = Field(default_factory=list)
     answers: list[Answer] = Field(default_factory=list)
     result: Optional[Result] = None
-    # snapshots of per-option utilities after each answer (used for leader-stability stop)
-    rank_history: list[dict[str, float]] = Field(default_factory=list)
     # while resolving a "잘 모르겠어요" via recursive sub-questions (§6.3):
     # {"root_id", "factor_a_id", "factor_b_id", "depth"} — None when not decomposing
     active_decomposition: Optional[dict[str, Any]] = None
-    error: Optional[str] = None
 
     # --- convenience lookups ---
     def factor(self, factor_id: str) -> Optional[Factor]:

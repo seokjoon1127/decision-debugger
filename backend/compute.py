@@ -58,21 +58,16 @@ def _softmax(theta: np.ndarray) -> np.ndarray:
 
 def normalize_scores(
     raw_scores: dict[str, dict[str, float]],
-    directions: dict[str, str],
 ) -> dict[str, dict[str, float]]:
     """Per-factor min-max scale option scores into [0, 1].
 
     ``raw_scores``: option_id -> {factor_id -> desirability in [0, 1]} where the
-    LLM already encodes 1.0 = best. ``directions`` is INFORMATIONAL ONLY and is
-    never used to invert values (the desirability convention already handles it).
+    LLM already encodes 1.0 = best.
 
     For every factor we min-max scale across options. If a factor's spread
     (max - min) is below 1e-9 we set all of its normalized values to 0.5 to avoid
     amplifying numerical noise. The returned dict preserves the input shape.
     """
-    # `directions` is intentionally unused for the math (informational only).
-    _ = directions
-
     option_ids = list(raw_scores.keys())
     if not option_ids:
         return {}
@@ -438,11 +433,8 @@ def _binary_entropy(p: float) -> float:
 
 
 def select_next_question(
-    prior: dict[str, float],
     current: dict[str, float],
-    comparisons: list[dict[str, Any]],
     candidate_pairs: list[tuple[str, str]],
-    candidate_indicators: list[dict[str, Any]],
     norm_scores: dict[str, dict[str, float]],
     ensemble_size: int = 30,
     seed: int = 0,
@@ -454,16 +446,10 @@ def select_next_question(
     deterministic rng seeded with ``seed``. Scores each candidate by ensemble
     disagreement and returns the max-disagreement candidate.
 
-    Returns ``None`` if both candidate lists are empty, or if the whole ensemble
+    Returns ``None`` if there are no candidate pairs, or if the whole ensemble
     agrees on the same top option AND the maximum disagreement is below 0.05.
     """
-    # `prior` / `comparisons` are not needed for the QBC disagreement heuristic
-    # but are part of the orchestrator's call contract.
-    _ = prior, comparisons
-
-    has_pairs = bool(candidate_pairs)
-    has_inds = bool(candidate_indicators)
-    if not has_pairs and not has_inds:
+    if not candidate_pairs:
         return None
 
     factor_ids = list((current or {}).keys())
@@ -533,24 +519,6 @@ def select_next_question(
         if score > best_score:
             best_score = score
             best = {"kind": "weight_pairwise", "pair": (fa, fb)}
-
-    # Indicator candidates: normalized std of w[f] across ensemble, scaled by
-    # mean w[f].
-    for ind in candidate_indicators or []:
-        fid = ind.get("factor_id")
-        ind_id = ind.get("indicator_id")
-        if fid not in idx:
-            continue
-        col = ensemble[:, idx[fid]]
-        std = float(np.std(col))
-        mw = float(mean_w[idx[fid]])
-        # Coefficient-of-variation style disagreement, bounded into ~[0,1].
-        norm_var = std / (mw + _EPS)
-        disagreement = float(min(norm_var, 1.0))
-        score = disagreement * mw
-        if score > best_score:
-            best_score = score
-            best = {"kind": "indicator", "indicator_id": ind_id, "factor_id": fid}
 
     if best is None:
         return None
